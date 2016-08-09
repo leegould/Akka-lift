@@ -62,7 +62,7 @@ namespace Akka_lift
 
     // CLASSES
 
-    public class Building : UntypedActor
+    public class Building : ReceiveActor
     {
         private bool buildingOpen;
         private readonly int floors;
@@ -74,19 +74,17 @@ namespace Akka_lift
         {
             this.floors = floors;
             this.lifts = lifts;
-        }
 
-        protected override void OnReceive(object message)
-        {
-            if (message is BuildingOpenMessage)
+            Receive<BuildingOpenMessage>(msg =>
             {
                 liftManager = Context.ActorOf(Props.Create(() => new LiftManager(floors, lifts)));
 
                 buildingOpen = true;
 
                 ConsoleExtensions.WriteLineColor(ConsoleColor.DarkRed, "Building Open");
-            }
-            else if (message is FloorMessage)
+            });
+
+            Receive<FloorMessage>(msg =>
             {
                 if (!buildingOpen)
                 {
@@ -94,43 +92,38 @@ namespace Akka_lift
                     return;
                 }
 
-                liftManager.Tell(message);
-            }
-
+                liftManager.Tell(msg);
+            });
         }
     }
 
-    public class Passenger : UntypedActor
+    public class Passenger : ReceiveActor
     {
         private readonly IActorRef liftManager;
 
         public Passenger(IActorRef liftManager)
         {
-
             this.liftManager = liftManager;
-        }
 
-        protected override void OnReceive(object message)
-        {
-            var msg = message as FloorMessage;
-            if (msg != null)
+            Receive<FloorMessage>(msg =>
             {
                 ConsoleExtensions.WriteLineColor(ConsoleColor.Cyan, "I'm a passenger and I want to go to floor " + msg.Floor);
-
                 liftManager.Tell(new FloorMessage(msg.Floor));
-            }
-            if (message is InvalidFloorMessage)
+            });
+
+            Receive<InvalidFloorMessage>(msg =>
             {
                 ConsoleExtensions.WriteLineColor(ConsoleColor.Cyan, "Ah, I asked for a floor that doesn't exist.");
-            }
-            if (message is NotOpenMessage)
+            });
+
+            Receive<NotOpenMessage>(msg =>
             {
                 ConsoleExtensions.WriteLineColor(ConsoleColor.Cyan, "Building is not open yet!");
-            }
+            });
         }
     }
 
-    public class Lift : UntypedActor
+    public class Lift : ReceiveActor
     {
         private readonly int liftNumber;
         private int currentFloor;
@@ -139,28 +132,22 @@ namespace Akka_lift
         {
             this.liftNumber = liftNumber;
             currentFloor = initialFloorNumber;
-        }
 
-        protected override void OnReceive(object message)
-        {
-            var msg = message as FloorMessage;
-            if (msg != null)
+            Receive<FloorMessage>(msg =>
             {
                 ConsoleExtensions.WriteLineColor(ConsoleColor.Green, "Moving lift #" + liftNumber + " to floor " + msg.Floor);
-
                 currentFloor = msg.Floor;
-            }
-            Sender.Tell(new LiftSuccessMessage(currentFloor));
+                Sender.Tell(new LiftSuccessMessage(currentFloor));
+            });
         }
     }
+    
 
-
-
-    public class LiftManager : UntypedActor
+    public class LiftManager : ReceiveActor
     {
         private readonly int floors;
         private int lifts;
-        private List<LiftStatus> liftList;
+        private readonly List<LiftStatus> liftList;
 
         private class LiftStatus
         {
@@ -185,34 +172,24 @@ namespace Akka_lift
                 var liftNumber = i;
                 liftList.Add(new LiftStatus { LiftNumber = liftNumber, Actor = Context.ActorOf(Props.Create(() => new Lift(liftNumber, 0)), "lift" + liftNumber), Available = true, InTransit = false });
             }
-        }
 
-        protected override void OnReceive(object message)
-        {
-            if (message is FloorMessage)
+            Receive<FloorMessage>(msg =>
             {
-                var msg = message as FloorMessage;
                 if (msg?.Floor > floors)
                 {
                     Console.WriteLine("That floor doesn't exist!");
-
                     Sender.Tell(new InvalidFloorMessage());
                 }
                 else
                 {
-                    liftList.FirstOrDefault(x => x.Available)?.Actor.Tell(message);
+                    liftList.FirstOrDefault(x => x.Available)?.Actor.Tell(msg);
                 }
-            }
-            if (message is LiftSuccessMessage)
+            });
+
+            Receive<LiftSuccessMessage>(msg =>
             {
-                var msg = message as LiftSuccessMessage;
-
                 ConsoleExtensions.WriteLineColor(ConsoleColor.Green, "Lift Succeeded! " + msg.Floor);
-                //if (liftList.FirstOrDefault(x => x.LiftNumber == ) )
-                //{
-
-                //}
-            }
+            });
         }
     }
 }
