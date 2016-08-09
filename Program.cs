@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Akka.Actor;
+using Akka.Event;
 using Microsoft.Win32;
 
 namespace Akka_lift
@@ -64,6 +65,8 @@ namespace Akka_lift
 
     public class Building : ReceiveActor
     {
+        private readonly ILoggingAdapter log = Context.GetLogger();
+        
         private bool buildingOpen;
         private readonly int floors;
         private readonly int lifts;
@@ -81,7 +84,7 @@ namespace Akka_lift
 
                 buildingOpen = true;
 
-                ConsoleExtensions.WriteLineColor(ConsoleColor.DarkRed, "Building Open");
+                log.Info("Building Open");
             });
 
             Receive<FloorMessage>(msg =>
@@ -99,6 +102,8 @@ namespace Akka_lift
 
     public class Passenger : ReceiveActor
     {
+        private readonly ILoggingAdapter log = Context.GetLogger();
+
         private readonly IActorRef liftManager;
 
         public Passenger(IActorRef liftManager)
@@ -107,24 +112,26 @@ namespace Akka_lift
 
             Receive<FloorMessage>(msg =>
             {
-                ConsoleExtensions.WriteLineColor(ConsoleColor.Cyan, "I'm a passenger and I want to go to floor " + msg.Floor);
+                log.Info("I'm a passenger and I want to go to floor " + msg.Floor);
                 liftManager.Tell(new FloorMessage(msg.Floor));
             });
 
             Receive<InvalidFloorMessage>(msg =>
             {
-                ConsoleExtensions.WriteLineColor(ConsoleColor.Cyan, "Ah, I asked for a floor that doesn't exist.");
+                log.Info("Ah, I asked for a floor that doesn't exist.");
             });
 
             Receive<NotOpenMessage>(msg =>
             {
-                ConsoleExtensions.WriteLineColor(ConsoleColor.Cyan, "Building is not open yet!");
+                log.Info("Building is not open yet!");
             });
         }
     }
 
     public class Lift : ReceiveActor
     {
+        private readonly ILoggingAdapter log = Context.GetLogger();
+
         private readonly int liftNumber;
         private int currentFloor;
 
@@ -135,7 +142,7 @@ namespace Akka_lift
 
             Receive<FloorMessage>(msg =>
             {
-                ConsoleExtensions.WriteLineColor(ConsoleColor.Green, "Moving lift #" + liftNumber + " to floor " + msg.Floor);
+                log.Info("Moving lift #" + liftNumber + " to floor " + msg.Floor);
                 currentFloor = msg.Floor;
                 Sender.Tell(new LiftSuccessMessage(currentFloor));
             });
@@ -145,6 +152,8 @@ namespace Akka_lift
 
     public class LiftManager : ReceiveActor
     {
+        private readonly ILoggingAdapter log = Context.GetLogger();
+
         private readonly int floors;
         private int lifts;
         private readonly List<LiftStatus> liftList;
@@ -177,7 +186,7 @@ namespace Akka_lift
             {
                 if (msg?.Floor > floors)
                 {
-                    Console.WriteLine("That floor doesn't exist!");
+                    log.Error("That floor doesn't exist!");
                     Sender.Tell(new InvalidFloorMessage());
                 }
                 else
@@ -188,7 +197,7 @@ namespace Akka_lift
 
             Receive<LiftSuccessMessage>(msg =>
             {
-                ConsoleExtensions.WriteLineColor(ConsoleColor.Green, "Lift Succeeded! " + msg.Floor);
+                log.Info("Lift Succeeded! " + msg.Floor);
             });
         }
     }
