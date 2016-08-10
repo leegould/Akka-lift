@@ -41,6 +41,16 @@ namespace Akka_lift
 
     public class NotOpenMessage { }
 
+    public class RequestLiftMessage
+    {
+        public int Floor { get; }
+
+        public RequestLiftMessage(int floorNumber)
+        {
+            Floor = floorNumber;
+        }
+    }
+
     public class FloorMessage
     {
         public int Floor { get; }
@@ -113,7 +123,7 @@ namespace Akka_lift
             Receive<FloorMessage>(msg =>
             {
                 log.Info("I'm a passenger and I want to go to floor " + msg.Floor);
-                liftManager.Tell(new FloorMessage(msg.Floor));
+                liftManager.Tell(new RequestLiftMessage(msg.Floor));
             });
 
             Receive<InvalidFloorMessage>(msg =>
@@ -140,7 +150,7 @@ namespace Akka_lift
             this.liftNumber = liftNumber;
             currentFloor = initialFloorNumber;
 
-            Receive<FloorMessage>(msg =>
+            Receive<RequestLiftMessage>(msg =>
             {
                 log.Info("Moving lift #" + liftNumber + " to floor " + msg.Floor);
                 currentFloor = msg.Floor;
@@ -182,7 +192,7 @@ namespace Akka_lift
                 liftList.Add(new LiftStatus { LiftNumber = liftNumber, Actor = Context.ActorOf(Props.Create(() => new Lift(liftNumber, 0)), "lift" + liftNumber), Available = true, InTransit = false });
             }
 
-            Receive<FloorMessage>(msg =>
+            Receive<RequestLiftMessage>(msg =>
             {
                 if (msg?.Floor > floors)
                 {
