@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Akka.Actor;
 using Akka.Event;
+using Akka.Util.Internal;
 using Microsoft.Win32;
 
 namespace Akka_lift
@@ -26,7 +27,7 @@ namespace Akka_lift
             var passengerProps = Props.Create<Passenger>(buildingActor);
             var passengerActor = actorSystem.ActorOf(passengerProps, "Passenger1");
 
-            passengerActor.Tell(new FloorMessage(1));
+            passengerActor.Tell(new FloorMessage(0, 1));
 
 
             actorSystem.AwaitTermination();
@@ -43,31 +44,40 @@ namespace Akka_lift
 
     public class RequestLiftMessage
     {
-        public int Floor { get; }
+        public int FromFloor { get; }
+        public int ToFloor { get; }
 
-        public RequestLiftMessage(int floorNumber)
+
+        public RequestLiftMessage(int fromFloor, int toFloor)
         {
-            Floor = floorNumber;
+            FromFloor = fromFloor;
+            ToFloor = toFloor;
         }
     }
 
     public class FloorMessage
     {
-        public int Floor { get; }
+        public int FromFloor { get; }
+        public int ToFloor { get; }
 
-        public FloorMessage(int floorNumber)
+
+        public FloorMessage(int fromFloor, int toFloor)
         {
-            Floor = floorNumber;
+            FromFloor = fromFloor;
+            ToFloor = toFloor;
         }
     }
 
-    public class LiftSuccessMessage
+    public class LiftArrivedMessage
     {
-        public int Floor { get; }
+        public int FromFloor { get; }
+        public int ToFloor { get; }
 
-        public LiftSuccessMessage(int floorNumber)
+
+        public LiftArrivedMessage(int fromFloor, int toFloor)
         {
-            Floor = floorNumber;
+            FromFloor = fromFloor;
+            ToFloor = toFloor;
         }
     }
 
@@ -105,7 +115,7 @@ namespace Akka_lift
                     return;
                 }
 
-                liftManager.Tell(msg);
+                liftManager.Tell(new RequestLiftMessage(msg.FromFloor, msg.ToFloor));
             });
         }
     }
@@ -122,8 +132,8 @@ namespace Akka_lift
 
             Receive<FloorMessage>(msg =>
             {
-                log.Info("I'm a passenger and I want to go to floor " + msg.Floor);
-                liftManager.Tell(new RequestLiftMessage(msg.Floor));
+                log.Info("I'm a passenger and I want to go from floor " + msg.FromFloor + " to floor " + msg.ToFloor);
+                liftManager.Tell(new RequestLiftMessage(msg.FromFloor, msg.ToFloor));
             });
 
             Receive<InvalidFloorMessage>(msg =>
@@ -134,6 +144,11 @@ namespace Akka_lift
             Receive<NotOpenMessage>(msg =>
             {
                 log.Info("Building is not open yet!");
+            });
+
+            Receive<LiftArrivedMessage>(msg =>
+            {
+                log.Info("Boarding lift");
             });
         }
     }
@@ -152,9 +167,12 @@ namespace Akka_lift
 
             Receive<RequestLiftMessage>(msg =>
             {
-                log.Info("Moving lift #" + liftNumber + " to floor " + msg.Floor);
-                currentFloor = msg.Floor;
-                Sender.Tell(new LiftSuccessMessage(currentFloor));
+                if (currentFloor != msg.FromFloor)
+                {
+                    log.Info("Moving lift #" + liftNumber + " from floor " + currentFloor + " to floor " + msg.FromFloor);
+                    currentFloor = msg.FromFloor;
+                }
+                Sender.Tell(new LiftArrivedMessage(currentFloor, msg.ToFloor));
             });
         }
     }
@@ -167,6 +185,7 @@ namespace Akka_lift
         private readonly int floors;
         private int lifts;
         private readonly List<LiftStatus> liftList;
+        private List<PassengerWaiting> passengersWaiting;
 
         private class LiftStatus
         {
@@ -179,12 +198,20 @@ namespace Akka_lift
             public bool Available { get; set; }
         }
 
+        private class PassengerWaiting
+        {
+            public IActorRef Actor { get; set; }
+
+            public int TargetFloor { get; set; }
+        }
+
         public LiftManager(int floors, int lifts)
         {
             this.floors = floors;
             this.lifts = lifts;
 
             liftList = new List<LiftStatus>();
+            passengersWaiting = new List<PassengerWaiting>();
 
             for (var i = 0; i < lifts; i++)
             {
@@ -194,20 +221,26 @@ namespace Akka_lift
 
             Receive<RequestLiftMessage>(msg =>
             {
-                if (msg?.Floor > floors)
+                if (msg?.ToFloor > floors)
                 {
                     log.Error("That floor doesn't exist!");
                     Sender.Tell(new InvalidFloorMessage());
                 }
                 else
                 {
+                    log.Info("Requesting a lift..");
                     liftList.FirstOrDefault(x => x.Available)?.Actor.Tell(msg);
+                    passengersWaiting.Add(new PassengerWaiting { Actor = Sender, TargetFloor = msg.ToFloor});
                 }
             });
 
-            Receive<LiftSuccessMessage>(msg =>
+            Receive<LiftArrivedMessage>(msg =>
             {
-                log.Info("Lift Succeeded! " + msg.Floor);
+                log.Info("Lift Arrived at " + msg.FromFloor);
+
+                var passengers = passengersWaiting.Where(x => x.TargetFloor == msg.ToFloor);
+
+                passengers.Select(x => x.Actor).ForEach(x => x.Tell(msg));
             });
         }
     }
