@@ -317,7 +317,7 @@ namespace Akka_lift
                 if (passengersWaiting.Count(x => x.TargetFloor == msg.ToFloor) == passengersOnBoard.Count)
                 {
                     log.Info("All passengers aboard.");
-                    passengersWaiting.Where(x => x.TargetFloor == msg.ToFloor).ForEach(x => passengersWaiting.Remove(x));
+                    passengersWaiting.Where(x => x.TargetFloor == msg.ToFloor).ToList().ForEach(x => passengersWaiting.Remove(x));
                     msg.Lift.Tell(new LiftReadyToLeaveMessage(msg.FromFloor, msg.ToFloor, passengersOnBoard.Select(x => x.Actor).ToList()));
                 }
                 else
@@ -329,7 +329,7 @@ namespace Akka_lift
             Receive<LiftFinishedMessage>(msg =>
             {
                 log.Info("Lift journey finished.");
-                passengersInLift.Where(x => x.TargetFloor == msg.Floor).ForEach(x => passengersInLift.Remove(x));
+                passengersInLift.Where(x => x.TargetFloor == msg.Floor).ToList().ForEach(x => passengersInLift.Remove(x));
                 foreach (var psg in msg.Passengers)
                 {
                     psg.Tell(new ExitLiftMessage(msg.Floor));
